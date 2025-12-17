@@ -81,25 +81,6 @@ jobs:
         id: fetch_aws_account_id
         shell: bash
         run: |
-          ACCOUNT_ID=$(python3 - <<'EOF'
-import json
-import sys
-
-tower = "${{ inputs.tower }}"
-environment = "${{ inputs.environment }}"
-
-with open("mappings/aws-accounts.json") as f:
-    data = json.load(f)
-
-account_id = data.get(tower, {}).get(environment, {}).get("account_id")
-
-if not account_id:
-    sys.exit("ERROR: No AWS account mapping found")
-
-print(account_id)
-EOF
-)
-          echo "account_id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
           echo "| AWS Account ID | $ACCOUNT_ID |" >> "$GITHUB_STEP_SUMMARY"
 
       # --------------------------------------------------
