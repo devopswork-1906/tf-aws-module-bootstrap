@@ -1,9 +1,1 @@
-merge(
-    {
-      Name        = var.logging_bucket_name
-      Purpose     = "server-access-logs-for-terraform-state-bucket"
-      Environment = var.env
-      OU          = var.tower
-      ManagedBy   = "tf-aws-module-bootstrap"
-    },
-    var.tags
+0.0.0
