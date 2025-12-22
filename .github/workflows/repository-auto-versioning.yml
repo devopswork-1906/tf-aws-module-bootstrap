@@ -1,6 +1,7 @@
 name: Repository Versioning
 
 on:
+  workflow_dispatch:
   pull_request:
     types: [closed]
 
