@@ -1,3 +1,9 @@
+## v0.0.7
+
+- PR_NUMBER=9
+- updated aws account id call
+- updated aws account id call
+
 ## v0.0.6
 
 - PR_NUMBER=8
