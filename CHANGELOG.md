@@ -1,3 +1,10 @@
+## v0.0.12
+
+- PR_NUMBER=15
+- Bootstrap module
+- added lock file for timebeing
+- updated workflow
+
 ## v0.0.11
 
 - PR_NUMBER=14
