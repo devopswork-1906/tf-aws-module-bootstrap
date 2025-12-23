@@ -11,8 +11,6 @@ terraform {
 }
 
 provider "aws" {
-  access_key = "AKIAUMYCISWJNXSQKUMS"
-  secret_key = "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"
   region     = var.region
 }
 
