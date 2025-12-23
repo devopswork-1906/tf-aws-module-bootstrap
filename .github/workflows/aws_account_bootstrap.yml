@@ -224,6 +224,13 @@ jobs:
         with:
           name: plan-${{ inputs.environment }}-${{ github.run_id }}
       
+      - name: Generate GitHub App token
+        id: app-token
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/github-app-token@v1
+        with:
+          app_id: ${{ secrets.GH_APP_ID }}
+          private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+            
       # Resolve target AWS account
       - name: Get AWS Account for workload tower ${{ inputs.workload_tower }} and environment ${{ inputs.environment }}
         id: get_aws_account
@@ -240,6 +247,15 @@ jobs:
           tower: ${{ inputs.workload_tower }}
           environment: ${{ inputs.environment }}
           region: ${{ inputs.region }}
+      
+      - name: Terraform setup
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-setup-temp@v1
+        with:
+          working_directory: "${{ env.WORKDIR }}"
+          backend_config_file: "${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend"
+          terraform_version: "1.10.0"
+          github_token: ${{ steps.app-token.outputs.token }}
+
       - name: Apply Terraform plan
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-apply@v1
         with:
