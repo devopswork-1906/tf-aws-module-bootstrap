@@ -1,3 +1,9 @@
+## v0.0.4
+
+- PR_NUMBER=6
+- updated secret name
+- updated secret name
+
 ## v0.0.3
 
 - PR_NUMBER=5
