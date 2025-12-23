@@ -221,10 +221,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      #- name: download terraform plan artifact
-        # uses: actions/download-artifact@v4
-        # with:
-        #   name: plan-${{ inputs.environment }}-${{ github.run_id }}
+#      - name: download terraform plan artifact
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: plan-${{ inputs.environment }}-${{ github.run_id }}
       
       - name: Generate GitHub App token
         id: app-token
@@ -288,12 +288,12 @@ jobs:
           EOF
           echo "Generated terraform.auto.tfvars.json with the following content:"
           cat terraform.auto.tfvars.json      
-      # - name: Terraform plan
-      #   id: tf_plan
-      #   uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-plan@v1
-      #   with:
-      #     working_directory: "${{ env.WORKDIR }}"
-      #     environment: ${{ inputs.environment }}
+      - name: Terraform plan
+        id: tf_plan
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-plan@v1
+        with:
+          working_directory: "${{ env.WORKDIR }}"
+          environment: ${{ inputs.environment }}
       
       - name: Apply Terraform plan
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-apply@v1
