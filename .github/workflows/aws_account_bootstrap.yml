@@ -66,8 +66,8 @@ jobs:
         id: app-token
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/github-app-token@v1
         with:
-          app_id: ${{ secrets.github_app_id }}
-          private_key: ${{ secrets.github_app_private_key }}
+          app_id: ${{ secrets.GITHUB_APP_ID }}
+          private_key: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
       - name: Print run context
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/print-run-context@v1
         with:
