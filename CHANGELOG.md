@@ -1,3 +1,9 @@
+## v0.0.5
+
+- PR_NUMBER=7
+- updated tower name
+- updated tower name
+
 ## v0.0.4
 
 - PR_NUMBER=6
