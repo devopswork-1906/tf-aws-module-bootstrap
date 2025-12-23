@@ -3,138 +3,243 @@ name: AWS Account Bootstrap
 on:
   workflow_dispatch:
     inputs:
-      tower:
-        description: 'Select workload tower'
+      workload_tower:
+        description: Workload tower (tu, int, cust, sec, coll, comm, fin)
         required: true
         type: choice
         options: [tu, int, cust, sec, coll, comm, fin]
-
       environment:
-        description: 'Target environment (drives env vars, approvals, role)'
+        description: Target environment (drives GH environment for approvals, oidc iam role etc.)
         required: true
         type: choice
         options: [dev, tst, ppe, prd]
-
-      region:
-        description: 'AWS Region'
+      CostCentre:
+        description: Cost Centre tag value to apply to resources created in this account
         required: true
-        default: 'eu-west-1'
-
-env: 
-  TF_WORKING_DIR: bootstrap
+      region:
+        description: AWS region to deploy the resources
+        required: true
+        default: eu-west-1
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
+# Bootstrap is a ONE-TIME operation per account
 concurrency:
-  group: bootstrap-${{ inputs.tower }}-${{ inputs.environment }}
+  group: bootstrap-${{ inputs.workload_tower }}-${{ inputs.environment }}
   cancel-in-progress: false
 
 jobs:
-  aws-account-bootstrap:
-    name: AWS Account Bootstrap - ${{ inputs.tower }} / ${{ inputs.environment }}
+  bootstrap-plan:
+    name: Bootstrap plan for ${{ inputs.workload_tower }}-${{ inputs.environment }} AWS Account
     runs-on: ubuntu-latest
+    env:
+      WORKDIR : "."
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Print run context
-        env:
-          SERVER_URL: ${{ github.server_url }}
-          REPOSITORY: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_NUMBER: ${{ github.run_number }}
-          EVENT_NAME: ${{ github.event_name }}
-          ACTOR: ${{ github.actor }}
-          TRIGGERING_ACTOR: ${{ github.event.sender.login || 'N/A' }}
-          ACTION_TYPE: "bootstrap"
-        run: |
-          {
-            echo "## AWS Account Bootstrap - Run Context"
-            echo ""
-            echo "| Key | Value |"
-            echo "|-----|-------|"
-            echo "| Tower | ${{ inputs.tower }} |"
-            echo "| Environment | ${{ inputs.environment }} |"
-            echo "| Region | ${{ inputs.region }} |"
-            echo "| Repository | ${REPOSITORY} |"
-            echo "| Run | ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID} (#${RUN_NUMBER}) |"
-            echo "| Trigger | ${EVENT_NAME} |"
-            echo "| Actor | ${ACTOR} (triggering: ${TRIGGERING_ACTOR}) |"
-            echo "| Action | ${ACTION_TYPE} |"
-            echo "| Git Ref | ${{ github.ref }} |"
-            echo "| Run ID | ${RUN_ID} |"
-          } >> $GITHUB_STEP_SUMMARY
-
-      # Fetch AWS Account ID
-      - name: Fetch AWS Account ID
-        id: fetch_aws_account_id
+      
+      - name: Ensure jq is installed
         shell: bash
         run: |
-          ACCOUNT_ID=$(python3 - <<'EOF'
-          import json
-          import sys
-          tower = "${{ inputs.tower }}"
-          environment = "${{ inputs.environment }}"
-          with open("mappings/aws-accounts.json") as f:
-          data = json.load(f)
-          account_id = data.get(tower, {}).get(environment, {}).get("account_id")
-          if not account_id:
-              sys.exit("ERROR: No AWS account mapping found")
-          print(account_id)
-          EOF)
-          echo "account_id=$ACCOUNT_ID" >> "$GITHUB_OUTPUT"
-          echo "| AWS Account ID | $ACCOUNT_ID |" >> "$GITHUB_STEP_SUMMARY"
-      
-      # Authenticate to AWS (OIDC two-hop)
-      - name: Authenticate to AWS
-        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/aws-oidc-auth@main
+          set -euo pipefail
+          if command -v jq >/dev/null 2>&1; then
+            echo "jq already installed: $(jq --version)"
+            exit 0
+          fi
+          echo "jq not found. Installing..."
+          if [ -f /etc/redhat-release ]; then
+            sudo yum install -y jq || sudo dnf install -y jq
+          elif [ -f /etc/debian_version ]; then
+            sudo apt-get update
+            sudo apt-get install -y jq
+          else
+            echo "Unsupported OS. Installing static jq binary..."
+            curl -L -o jq https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64
+            chmod +x jq
+            sudo mv jq /usr/local/bin/jq
+          fi
+          echo "jq installed: $(jq --version)"
+      - name: Generate GitHub App token
+        id: app-token
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/github-app-token@v1
         with:
-          target_account_id: ${{ steps.fetch_aws_account_id.outputs.account_id }}
-          tower: ${{ inputs.tower }}
+          app_id: ${{ secrets.github_app_id }}
+          private_key: ${{ secrets.github_app_private_key }}
+      - name: Print run context
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/print-run-context@v1
+        with:
+          title: AWS Account Bootstrap for ${{ inputs.workload_tower }}-${{ inputs.environment }}
+          workload_tower: ${{ inputs.workload_tower }}
           environment: ${{ inputs.environment }}
           region: ${{ inputs.region }}
       
-      # Bootstrap AWS Account (Terraform)
-      - name: Terraform setup
-        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-setup@main
+      # Resolve target AWS account
+      - name: Get AWS Account for workload tower {{ inputs.workload_tower }} and environment {{ inputs.environment }}
+        id: get_aws_account
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/get-aws-account-id@v1
         with:
+          workload_tower: ${{ inputs.workload_tower }}
           environment: ${{ inputs.environment }}
-          working_directory: "${{ env.TF_WORKING_DIR }}"
-      
-      - name: Terraform plan
-        id: plan
-        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-plan@main
+
+      # Authenticate using OIDC
+      - name: Authenticate to {{ inputs.workload_tower }}-{{ inputs.environment }} AWS Account
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/aws-oidc-auth@v1
         with:
-          working_directory: "${{ env.TF_WORKING_DIR }}"
-          environment: ${{ inputs.environment }}
-      - name: Terraform apply
-        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-apply@main
-        with:
-          working_directory: ${{ inputs.working_directory }}
-          environment: ${{ inputs.environment }}
-      
-      - name: Bootstrap AWS Account
-        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/aws-account-bootstrap@main
-        with:
-          tower: ${{ inputs.tower }}
+          target_account_id: ${{ steps.get_aws_account.outputs.aws_account_id }}
+          tower: ${{ inputs.workload_tower }}
           environment: ${{ inputs.environment }}
           region: ${{ inputs.region }}
-          aws_account_id: ${{ steps.fetch_aws_account_id.outputs.account_id }}
-          workload_tower_id: ${{ steps.fetch_aws_account_info.outputs.workload_tower_id }}
-          workload_environment_id: ${{ steps.fetch_aws_account_info.outputs.workload_environment_id }}
-          iam_user_arn: ${{ steps.fetch_aws_account_info.outputs.iam_user_arn }}
-          iam_group_arn: ${{ steps.fetch_aws_account_info.outputs.iam_group_arn }}
-          iam_role_arn: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/iamr-${{ inputs.tower }}-${{ inputs.environment }}-deploy
-          working_directory: "../"
-      - name: Print completion message
+
+      - name: Compute bootstrap bucket
+        id: bucket
         run: |
+          echo "bucket=${{ inputs.workload_tower }}-${{ inputs.environment }}-terraform-${{ steps.get_aws_account.outputs.aws_account_id }}-bootstrap" >> "$GITHUB_OUTPUT"
+
+      # Check if bucket already exists
+      - name: Check if bootstrap bucket exists
+        id: bucket_check
+        run: |
+          if aws s3api head-bucket --bucket "${{ steps.bucket.outputs.bucket }}" 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Bootstrap bucket already exists"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Bootstrap bucket does not exist"
+          fi
+      # Create bootstrap S3 bucket (only if missing)
+      - name: Create bootstrap S3 bucket
+        if: steps.bucket_check.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          BUCKET="${{ steps.bucket.outputs.bucket }}"
+          REGION="${{ inputs.region }}"
+
+          if [ "$REGION" = "us-east-1" ]; then
+            aws s3api create-bucket --bucket "$BUCKET"
+          else
+            aws s3api create-bucket \
+              --bucket "$BUCKET" \
+              --region "$REGION" \
+              --create-bucket-configuration LocationConstraint="$REGION"
+          fi
+
+          aws s3api put-bucket-versioning \
+            --bucket "$BUCKET" \
+            --versioning-configuration Status=Enabled
+
+          aws s3api put-bucket-encryption \
+            --bucket "$BUCKET" \
+            --server-side-encryption-configuration \
+            '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+
+          aws s3api put-public-access-block \
+            --bucket "$BUCKET" \
+            --public-access-block-configuration \
+            BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+
+          aws s3api put-bucket-tagging \
+            --bucket "$BUCKET" \
+            --tagging "TagSet=[
+              {Key=tower,Value=${{ inputs.workload_tower }}},
+              {Key=environment,Value=${{ inputs.environment }}},
+              {Key=CostCentre,Value=${{ inputs.CostCentre }}},
+              {Key=github_repository,Value=${{ github.repository }}},
+              {Key=source_url,Value=${{ github.server_url }}/${{ github.repository }}},
+              {Key=workflow_run_url,Value=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}},
+              {Key=actor,Value=${{ github.actor }}},
+              {Key=created_at,Value="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"}
+            ]"
+
+      # Create backend file AFTER bucket exists
+      - name: Generate terraform backend config
+        run: |
+          cat <<EOF > ${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend
+          bucket = "${{ steps.bucket.outputs.bucket }}"
+          key    = "bootstrap/${{ inputs.environment }}/terraform.tfstate"
+          region = "${{ inputs.region }}"
+          encrypt = true
+          use_lockfile = true
+          EOF
+
+          cat ${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend
+      
+      - name: Generate GitHub metadata tfvars
+        working-directory: "${{ env.WORKDIR }}"
+        run: |
+          set -euo pipefail
+          cat <<EOF > "${{ env.WORKDIR }}/terraform.auto.tfvars.json"
           {
-            echo ""
-            echo "## AWS Account Bootstrap Completed"
-            echo ""
-            echo "- Tower: **${{ inputs.tower }}**"
-            echo "- Environment: **${{ inputs.environment }}**"
-            echo "- Region: **${{ inputs.region }}**"
-            echo "- AWS Account ID: **${{ steps.fetch_aws_account_id.outputs.account_id }}**"
-          } >> "$GITHUB_STEP_SUMMARY"
+            "tower": "${{ inputs.workload_tower }}",
+            "environment": "${{ inputs.environment }}",
+            "region": "${{ inputs.region }}",
+            "CostCentre": "${{ inputs.CostCentre }}",
+            "github_tags": {
+              "github_repository": "${{ github.repository }}",
+              "source_url": "${{ github.server_url }}/${{ github.repository }}",
+              "workflow_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "actor": "${{ github.actor }}",
+              "created_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            }
+          }
+          EOF
+          echo "Generated terraform.auto.tfvars.json with the following content:"
+          cat terraform.auto.tfvars.json
+
+      - name: Terraform setup
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-setup-temp@v1
+        with:
+          working_directory: "${{ env.WORKDIR }}"
+          backend_config_file: "${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend"
+
+      - name: Terraform plan
+        id: tf_plan
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-plan@v1
+        with:
+          working_directory: "${{ env.WORKDIR }}"
+          environment: ${{ inputs.environment }}
+
+  approvals:
+    name: Wait for Approval before proceeding for terraform apply job
+    runs-on: ubuntu-latest
+    needs: bootstrap-plan
+    environment: ${{ fromJSON('{"prd":"production","ppe":"pre-production","tst":"test","dev":"development"}')[inputs.environment] || 'development' }}
+    steps:
+      - name: Awaiting approval to proceed
+        run: echo "The job is awaiting approval to proceed."
+  
+  bootstrap-apply:
+    name: Bootstrap apply for ${{ inputs.workload_tower }}-${{ inputs.environment }} AWS Account
+    runs-on: ubuntu-latest
+    needs: approvals
+    env:
+      WORKDIR : "."
+    steps:
+      - name: download terraform plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: plan-${{ inputs.environment }}-${{ github.run_id }}
+      
+      # Resolve target AWS account
+      - name: Get AWS Account for workload tower {{ inputs.workload_tower }} and environment {{ inputs.environment }}
+        id: get_aws_account
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/get-aws-account-id@v1
+        with:
+          workload_tower: ${{ inputs.workload_tower }}
+          environment: ${{ inputs.environment }}
+
+      # Authenticate using OIDC
+      - name: Authenticate to {{ inputs.workload_tower }}-{{ inputs.environment }} AWS Account
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/aws-oidc-auth@v1
+        with:
+          target_account_id: ${{ steps.get_aws_account.outputs.aws_account_id }}
+          tower: ${{ inputs.workload_tower }}
+          environment: ${{ inputs.environment }}
+          region: ${{ inputs.region }}
+      - name: Apply Terraform plan
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-apply@v1
+        with:
+          working_directory: "${{ env.WORKDIR }}"
+          plan_file: plan-${{ inputs.environment }}.tfplan
