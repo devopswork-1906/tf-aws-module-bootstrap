@@ -88,7 +88,7 @@ jobs:
       - name: Authenticate to ${{ inputs.workload_tower }}-${{ inputs.environment }} AWS Account
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/aws-oidc-auth@v1
         with:
-          target_account_id: ${{ steps.get_aws_account.outputs.aws_account_id }}
+          target_account_id: ${{ steps.get_aws_account.outputs.account_id }}
           tower: ${{ inputs.workload_tower }}
           environment: ${{ inputs.environment }}
           region: ${{ inputs.region }}
@@ -96,7 +96,7 @@ jobs:
       - name: Compute bootstrap bucket
         id: bucket
         run: |
-          echo "bucket=${{ inputs.workload_tower }}-${{ inputs.environment }}-terraform-${{ steps.get_aws_account.outputs.aws_account_id }}-bootstrap" >> "$GITHUB_OUTPUT"
+          echo "bucket=${{ inputs.workload_tower }}-${{ inputs.environment }}-terraform-${{ steps.get_aws_account.outputs.account_id }}-bootstrap" >> "$GITHUB_OUTPUT"
 
       # Check if bucket already exists
       - name: Check if bootstrap bucket exists
@@ -234,7 +234,7 @@ jobs:
       - name: Authenticate to ${{ inputs.workload_tower }}-${{ inputs.environment }} AWS Account
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/aws-oidc-auth@v1
         with:
-          target_account_id: ${{ steps.get_aws_account.outputs.aws_account_id }}
+          target_account_id: ${{ steps.get_aws_account.outputs.account_id }}
           tower: ${{ inputs.workload_tower }}
           environment: ${{ inputs.environment }}
           region: ${{ inputs.region }}
