@@ -219,10 +219,10 @@ jobs:
     env:
       WORKDIR : "."
     steps:
-      - name: download terraform plan artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: plan-${{ inputs.environment }}-${{ github.run_id }}
+#      - name: download terraform plan artifact
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: plan-${{ inputs.environment }}-${{ github.run_id }}
       
       - name: Generate GitHub App token
         id: app-token
@@ -255,7 +255,14 @@ jobs:
           backend_config_file: "${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend"
           terraform_version: "1.10.0"
           github_token: ${{ steps.app-token.outputs.token }}
-
+      
+      - name: Terraform plan
+        id: tf_plan
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-plan@v1
+        with:
+          working_directory: "${{ env.WORKDIR }}"
+          environment: ${{ inputs.environment }}
+      
       - name: Apply Terraform plan
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-apply@v1
         with:
