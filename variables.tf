@@ -15,9 +15,11 @@ variable "environment" {
 variable "region" {
   description = "AWS region"
   type        = string
-  default     = "eu-west-1"
 }
-
+variable "CostCentre" {
+  description = "Cost Centre tag value to apply to resources created in this account"
+  type        = string
+}
 variable "enable_kms" {
   description = "Enable KMS encryption for S3 buckets"
   type        = bool
@@ -31,10 +33,16 @@ variable "kms_key_arn" {
     error_message = "kms_key_arn must be set when enable_kms=true"
   }
 }
-variable "kms_key_arn" {
-  description = "KMS key ARN (required if enable_kms=true)"
-  type        = string
-  default     = null
+
+variable "github_tags" {
+  description = "Github metadata for tagging"
+  type = object({
+    github_repository = string
+    source_url        = string
+    workflow_run_url  = string
+    actor             = string
+    created_at        = string
+  })
 }
 
 variable "tags" {
