@@ -193,6 +193,8 @@ jobs:
         with:
           working_directory: "${{ env.WORKDIR }}"
           backend_config_file: "${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend"
+          terraform_version: "1.10.0"
+          github_token: ${{ steps.app-token.outputs.token }}
 
       - name: Terraform plan
         id: tf_plan
