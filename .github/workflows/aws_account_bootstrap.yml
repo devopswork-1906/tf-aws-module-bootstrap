@@ -219,12 +219,12 @@ jobs:
     env:
       WORKDIR : "."
     steps:
-#      - name: Checkout repository
-#        uses: actions/checkout@v4
-      - name: download terraform plan artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: plan-${{ inputs.environment }}-${{ github.run_id }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      #- name: download terraform plan artifact
+        # uses: actions/download-artifact@v4
+        # with:
+        #   name: plan-${{ inputs.environment }}-${{ github.run_id }}
       
       - name: Generate GitHub App token
         id: app-token
@@ -249,7 +249,17 @@ jobs:
           tower: ${{ inputs.workload_tower }}
           environment: ${{ inputs.environment }}
           region: ${{ inputs.region }}
-      
+
+      - name: Generate terraform backend config
+        run: |
+          cat <<EOF > ${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend
+          bucket = "${{ inputs.workload_tower }}-${{ inputs.environment }}-terraform-${{ steps.get_aws_account.outputs.account_id }}-bootstrap"
+          key    = "bootstrap/${{ inputs.environment }}/terraform.tfstate"
+          region = "${{ inputs.region }}"
+          encrypt = true
+          use_lockfile = true
+          EOF
+          cat ${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend      
       - name: Terraform setup
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-setup-temp@v1
         with:
@@ -257,7 +267,27 @@ jobs:
           backend_config_file: "${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend"
           terraform_version: "1.10.0"
           github_token: ${{ steps.app-token.outputs.token }}
-      
+      - name: Generate GitHub metadata tfvars
+        working-directory: "${{ env.WORKDIR }}"
+        run: |
+          set -euo pipefail
+          cat <<EOF > "${{ env.WORKDIR }}/terraform.auto.tfvars.json"
+          {
+            "tower": "${{ inputs.workload_tower }}",
+            "environment": "${{ inputs.environment }}",
+            "region": "${{ inputs.region }}",
+            "CostCentre": "${{ inputs.CostCentre }}",
+            "github_tags": {
+              "github_repository": "${{ github.repository }}",
+              "source_url": "${{ github.server_url }}/${{ github.repository }}",
+              "workflow_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "actor": "${{ github.actor }}",
+              "created_at": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            }
+          }
+          EOF
+          echo "Generated terraform.auto.tfvars.json with the following content:"
+          cat terraform.auto.tfvars.json      
       # - name: Terraform plan
       #   id: tf_plan
       #   uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-plan@v1
