@@ -81,7 +81,7 @@ jobs:
         id: get_aws_account
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/get-aws-account-id@v1
         with:
-          workload_tower: ${{ inputs.workload_tower }}
+          tower: ${{ inputs.workload_tower }}
           environment: ${{ inputs.environment }}
 
       # Authenticate using OIDC
@@ -227,7 +227,7 @@ jobs:
         id: get_aws_account
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/get-aws-account-id@v1
         with:
-          workload_tower: ${{ inputs.workload_tower }}
+          tower: ${{ inputs.workload_tower }}
           environment: ${{ inputs.environment }}
 
       # Authenticate using OIDC
