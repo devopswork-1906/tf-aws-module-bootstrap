@@ -77,7 +77,7 @@ jobs:
           region: ${{ inputs.region }}
       
       # Resolve target AWS account
-      - name: Get AWS Account for workload tower {{ inputs.workload_tower }} and environment {{ inputs.environment }}
+      - name: Get AWS Account for workload tower ${{ inputs.workload_tower }} and environment ${{ inputs.environment }}
         id: get_aws_account
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/get-aws-account-id@v1
         with:
@@ -85,7 +85,7 @@ jobs:
           environment: ${{ inputs.environment }}
 
       # Authenticate using OIDC
-      - name: Authenticate to {{ inputs.workload_tower }}-{{ inputs.environment }} AWS Account
+      - name: Authenticate to ${{ inputs.workload_tower }}-${{ inputs.environment }} AWS Account
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/aws-oidc-auth@v1
         with:
           target_account_id: ${{ steps.get_aws_account.outputs.aws_account_id }}
@@ -223,7 +223,7 @@ jobs:
           name: plan-${{ inputs.environment }}-${{ github.run_id }}
       
       # Resolve target AWS account
-      - name: Get AWS Account for workload tower {{ inputs.workload_tower }} and environment {{ inputs.environment }}
+      - name: Get AWS Account for workload tower ${{ inputs.workload_tower }} and environment ${{ inputs.environment }}
         id: get_aws_account
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/get-aws-account-id@v1
         with:
@@ -231,7 +231,7 @@ jobs:
           environment: ${{ inputs.environment }}
 
       # Authenticate using OIDC
-      - name: Authenticate to {{ inputs.workload_tower }}-{{ inputs.environment }} AWS Account
+      - name: Authenticate to ${{ inputs.workload_tower }}-${{ inputs.environment }} AWS Account
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/aws-oidc-auth@v1
         with:
           target_account_id: ${{ steps.get_aws_account.outputs.aws_account_id }}
