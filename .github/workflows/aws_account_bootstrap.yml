@@ -35,33 +35,14 @@ jobs:
   bootstrap-plan:
     name: Bootstrap plan for ${{ inputs.workload_tower }}-${{ inputs.environment }} AWS Account
     runs-on: ubuntu-latest
+    outputs:
+      account_id: ${{ steps.get_aws_account.outputs.account_id }}
+      backend_bucket: ${{ steps.bucket.outputs.bucket }}
     env:
       WORKDIR : "."
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
-      - name: Ensure jq is installed
-        shell: bash
-        run: |
-          set -euo pipefail
-          if command -v jq >/dev/null 2>&1; then
-            echo "jq already installed: $(jq --version)"
-            exit 0
-          fi
-          echo "jq not found. Installing..."
-          if [ -f /etc/redhat-release ]; then
-            sudo yum install -y jq || sudo dnf install -y jq
-          elif [ -f /etc/debian_version ]; then
-            sudo apt-get update
-            sudo apt-get install -y jq
-          else
-            echo "Unsupported OS. Installing static jq binary..."
-            curl -L -o jq https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64
-            chmod +x jq
-            sudo mv jq /usr/local/bin/jq
-          fi
-          echo "jq installed: $(jq --version)"
       - name: Generate GitHub App token
         id: app-token
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/github-app-token@v1
@@ -96,75 +77,16 @@ jobs:
       - name: Compute bootstrap bucket
         id: bucket
         run: |
-          echo "bucket=${{ inputs.workload_tower }}-${{ inputs.environment }}-terraform-${{ steps.get_aws_account.outputs.account_id }}-bootstrap" >> "$GITHUB_OUTPUT"
+          echo "bucket=${{ inputs.workload_tower }}-${{ inputs.environment }}-terraform-${{ steps.get_aws_account.outputs.account_id }}-backend" >> "$GITHUB_OUTPUT"
 
-      # Check if bucket already exists
-      - name: Check if bootstrap bucket exists
-        id: bucket_check
-        run: |
-          if aws s3api head-bucket --bucket "${{ steps.bucket.outputs.bucket }}" 2>/dev/null; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "Bootstrap bucket already exists"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Bootstrap bucket does not exist"
-          fi
-      # Create bootstrap S3 bucket (only if missing)
-      - name: Create bootstrap S3 bucket
-        if: steps.bucket_check.outputs.exists == 'false'
-        run: |
-          set -euo pipefail
-          BUCKET="${{ steps.bucket.outputs.bucket }}"
-          REGION="${{ inputs.region }}"
-
-          if [ "$REGION" = "us-east-1" ]; then
-            aws s3api create-bucket --bucket "$BUCKET"
-          else
-            aws s3api create-bucket \
-              --bucket "$BUCKET" \
-              --region "$REGION" \
-              --create-bucket-configuration LocationConstraint="$REGION"
-          fi
-
-          aws s3api put-bucket-versioning \
-            --bucket "$BUCKET" \
-            --versioning-configuration Status=Enabled
-
-          aws s3api put-bucket-encryption \
-            --bucket "$BUCKET" \
-            --server-side-encryption-configuration \
-            '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
-
-          aws s3api put-public-access-block \
-            --bucket "$BUCKET" \
-            --public-access-block-configuration \
-            BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
-
-          aws s3api put-bucket-tagging \
-            --bucket "$BUCKET" \
-            --tagging "TagSet=[
-              {Key=tower,Value=${{ inputs.workload_tower }}},
-              {Key=environment,Value=${{ inputs.environment }}},
-              {Key=CostCentre,Value=${{ inputs.CostCentre }}},
-              {Key=github_repository,Value=${{ github.repository }}},
-              {Key=source_url,Value=${{ github.server_url }}/${{ github.repository }}},
-              {Key=workflow_run_url,Value=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}},
-              {Key=actor,Value=${{ github.actor }}},
-              {Key=created_at,Value="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"}
-            ]"
-
-      # Create backend file AFTER bucket exists
-      - name: Generate terraform backend config
-        run: |
-          cat <<EOF > ${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend
-          bucket = "${{ steps.bucket.outputs.bucket }}"
-          key    = "bootstrap/${{ inputs.environment }}/terraform.tfstate"
-          region = "${{ inputs.region }}"
-          encrypt = true
-          use_lockfile = true
-          EOF
-
-          cat ${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend
+      - name: Ensure Terraform backend bucket
+        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-backend-bootstrap@v1
+        with:
+          bucket_name: ${{ steps.bucket.outputs.bucket }}
+          region: ${{ inputs.region }}
+          tower: ${{ inputs.workload_tower }}
+          environment: ${{ inputs.environment }}
+          cost_centre: ${{ inputs.CostCentre }}
       
       - name: Generate GitHub metadata tfvars
         working-directory: "${{ env.WORKDIR }}"
@@ -215,16 +137,12 @@ jobs:
   bootstrap-apply:
     name: Bootstrap apply for ${{ inputs.workload_tower }}-${{ inputs.environment }} AWS Account
     runs-on: ubuntu-latest
-    needs: approvals
+    needs: [bootstrap-plan, approvals]
     env:
       WORKDIR : "."
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-#      - name: download terraform plan artifact
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: plan-${{ inputs.environment }}-${{ github.run_id }}
       
       - name: Generate GitHub App token
         id: app-token
@@ -232,20 +150,12 @@ jobs:
         with:
           app_id: ${{ secrets.GH_APP_ID }}
           private_key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-            
-      # Resolve target AWS account
-      - name: Get AWS Account for workload tower ${{ inputs.workload_tower }} and environment ${{ inputs.environment }}
-        id: get_aws_account
-        uses: tool-ims/ims_tool-github-shared_actions/.github/actions/get-aws-account-id@v1
-        with:
-          tower: ${{ inputs.workload_tower }}
-          environment: ${{ inputs.environment }}
 
       # Authenticate using OIDC
       - name: Authenticate to ${{ inputs.workload_tower }}-${{ inputs.environment }} AWS Account
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/aws-oidc-auth@v1
         with:
-          target_account_id: ${{ steps.get_aws_account.outputs.account_id }}
+          target_account_id: ${{ needs.bootstrap-plan.outputs.account_id }}
           tower: ${{ inputs.workload_tower }}
           environment: ${{ inputs.environment }}
           region: ${{ inputs.region }}
@@ -253,13 +163,13 @@ jobs:
       - name: Generate terraform backend config
         run: |
           cat <<EOF > ${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend
-          bucket = "${{ inputs.workload_tower }}-${{ inputs.environment }}-terraform-${{ steps.get_aws_account.outputs.account_id }}-bootstrap"
-          key    = "bootstrap/${{ inputs.environment }}/terraform.tfstate"
+          bucket = "${{ needs.bootstrap-plan.outputs.backend_bucket }}"
+          key    = "bootstrap/terraform.tfstate"
           region = "${{ inputs.region }}"
           encrypt = true
           use_lockfile = true
           EOF
-          cat ${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend      
+          cat ${{ env.WORKDIR }}/${{ inputs.environment }}.tfbackend
       - name: Terraform setup
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-setup-temp@v1
         with:
@@ -287,14 +197,12 @@ jobs:
           }
           EOF
           echo "Generated terraform.auto.tfvars.json with the following content:"
-          cat terraform.auto.tfvars.json      
-      - name: Terraform plan
-        id: tf_plan
+          cat terraform.auto.tfvars.json
+      - name: Terraform Plan
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-plan@v1
         with:
           working_directory: "${{ env.WORKDIR }}"
-          environment: ${{ inputs.environment }}
-      
+          environment: "${{ inputs.environment }}"
       - name: Apply Terraform plan
         uses: tool-ims/ims_tool-github-shared_actions/.github/actions/terraform-apply@v1
         with:
