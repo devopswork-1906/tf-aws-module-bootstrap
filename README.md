@@ -2,7 +2,7 @@
 
 ## Overview
 
-**AWS Account Bootstrap** is a **platform-owned bootstrap framework** that uses **GitHub Actions** to orchestrate a **Terraform module** for initializing new AWS accounts in a standardized, secure, and auditable manner.
+**AWS Account Bootstrap** is a **platform-owned, enterprise-grade bootstrap framework** that uses **GitHub Actions** to orchestrate a **Terraform module** for initializing new AWS accounts in a **standardized**, **secure**, and **auditable manner**.
 
 This bootstrap is a **one-time operation per AWS account** and establishes the foundational components required for all future Terraform-based infrastructure deployments, including:
 
@@ -132,6 +132,7 @@ This token is not used for AWS authentication.
 
 ### GitHub Actions OIDC Provider
 Each AWS account trusts the GitHub Actions OIDC provider:
+
   ```yml
   arn:aws:iam::<ORG_ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com
   ```
@@ -140,11 +141,11 @@ OIDC removes the need for long-lived AWS access keys.
 
 ### Two-Hop Authentication (Recommended Pattern)
 
-**Hop 1:** GitHub → Org / Management Account
+**Hop 1: GitHub → Org / Management Account**
   - GitHub Actions assumes a role in the org account using OIDC
   - This role is tightly scoped and centrally audited via GitHub organization policies, GitHub Environments, and AWS CloudTrail.
 
-**Hop 2:** Org Account → Target Account
+**Hop 2: Org Account → Target Account**
   - Using temporary credentials from hop 1
   - Terraform assumes the same role name in the target account(workload account)
 
@@ -177,17 +178,20 @@ Session tags improve:
 ## Prerequisites
 
 ### AWS
+
 - AWS Organizations enabled
 - Org/Management account
 - OIDC IAM roles created in Org account
-- IAM role in Target account with trust to org OIDC role
+- OIDC role in target accounts
+- Trust relationship between org and target roles
 - GitHub OIDC provider configured
 
 ### GitHub
+
 - GitHub App installed on required orgs/repos
 - Secrets configured:
-  - GH_APP_ID
-  - GH_APP_PRIVATE_KEY
+  - `GH_APP_ID`
+  - `GH_APP_PRIVATE_KEY`
 
 These secrets can be configured at org level/repo level secrets. For Day 2, these secrets will be stored in COMM account secret manager.
 
@@ -265,9 +269,10 @@ Each bucket is clearly tagged to indicate purpose, ownership, and lifecycle.
 ---
 
 ## Workflow Execution Flow
-1. Manual trigger (workflow_dispatch)
-2. Get-token for Github apps
-3. Print Initial summary
+
+1. Manual trigger (`workflow_dispatch`)
+2. GitHub App token generation
+3. Print Initial summary(workflow context logging)
 4. Resolve AWS account ID from account mapping
 5. Authenticate via OIDC (two-hop)
 6. Create bootstrap S3 bucket (if missing)
@@ -323,7 +328,7 @@ This ensures bootstrap actions cannot be executed accidentally or without author
   - No destructive actions are performed
 - Terraform state is protected via:
   - `prevent_destroy`
-  - Explicit bucket deletion deny policies
+  - Explicit S3 bucket deletion deny policies
 
 In the event of misconfiguration, recovery requires **manual intervention by a platform administrator**.
 
@@ -642,9 +647,11 @@ output "logging_bucket_arn" {
 
 ## Enterprise Best Practices
 
-- Bootstrap once per account
+- Bootstrap exactly once per account
 - Use approval gate (GH environment) for deployment
-- Centralize account mapping
+- Centralized account mapping
+- No static credentials
+- Strong tagging and audit controls
 
 ---
 
@@ -653,7 +660,7 @@ output "logging_bucket_arn" {
 This bootstrap module intentionally does **not** provision:
 
 - Application infrastructure (EC2, EKS, RDS, etc.)
-- Network primitives (VPC, subnets, gateways)
+- Networking (VPC, subnets, gateways etc)
 - IAM users or long-lived credentials
 - CI/CD pipelines beyond initial bootstrap
 - Monitoring or security tooling (GuardDuty, Config, etc.)
@@ -665,8 +672,8 @@ These concerns are handled by **downstream, environment-specific Terraform modul
 ## Security Considerations
 
 - No long-lived credentials
-- Least privilege IAM
-- Encrypted state
+- Least-privilege IAM
+- Encrypted, versioned state
 - Auditable session tagging
 - Separation of duties via approval gates
 - Terraform state bucket deletion is explicitly denied, including for the account root user, to prevent accidental or irreversible loss of infrastructure state.
@@ -675,11 +682,6 @@ These concerns are handled by **downstream, environment-specific Terraform modul
 
 ## Summary
 
-This Bootstrap module provides a secure, scalable, and enterprise-ready foundation for Terraform-driven infrastructure across AWS Organizations.
+This AWS Account Bootstrap module establishes a **secure**, **scalable**, and **enterprise-ready foundation** for Terraform-driven infrastructure across AWS Organizations.
 
-Once completed, all downstream Terraform workflows inherit:
-- Secure authentication
-- Reliable state management
-- Full auditability
-
-This is the recommended pattern for large-scale AWS + GitHub environments.
+It is the **recommended enterprise pattern** for large-scale AWS + GitHub environments.
