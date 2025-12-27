@@ -2,7 +2,7 @@
 
 ## Overview
 
-**AWS Account Bootstrap** is an enterprise-grade **GitHub Actions workflow** and **Terraform module** used to initialize (bootstrap) a new AWS account in a standardized, secure, and auditable manner.
+**AWS Account Bootstrap** is a **platform-owned bootstrap framework** that uses **GitHub Actions** to orchestrate a **Terraform module** for initializing new AWS accounts in a standardized, secure, and auditable manner.
 
 This bootstrap is a **one-time operation per AWS account** and establishes the foundational components required for all future Terraform-based infrastructure deployments, including:
 
@@ -54,20 +54,23 @@ This enforces:
 1. [Architecture Overview](#architecture-overview)
 2. [Bootstrap Workflow Responsibilities](#bootstrap-workflow-responsibilities)
 3. [Authentication Model (Enterprise)](#authentication-model-enterprise)
-    - [GitHub App](#github-app-source-code-access)
-    - [OIDC Provider](#github-actions-oidc-provider)
-    - [Two-Hop Role Assumption](#two-hop-authentication-recommended-pattern)
-    - [sts:TagSession (Justification)](#ststagsession-why-it-is-required)
+   - [GitHub App](#github-app-source-code-access)
+   - [OIDC Provider](#github-actions-oidc-provider)
+   - [Two-Hop Role Assumption](#two-hop-authentication-recommended-pattern)
+   - [sts:TagSession (Justification)](#ststagsession-why-it-is-required)
 4. [Prerequisites](#prerequisites)
 5. [Logging & Audit Model](#logging--audit-model)
 6. [Terraform State & Locking Strategy](#terraform-state--locking-strategy)
+   - [Terraform Native State Locking (S3)](#terraform-native-state-locking-s3)
+   - [Backend Bootstrap Model](#backend-bootstrap-model)
+   - [S3 Bucket Classification](#s3-bucket-classification)
 7. [Workflow Execution Flow](#workflow-execution-flow)
 8. [Running the Bootstrap Workflow](#running-the-bootstrap-workflow)
 9. [Failure & Recovery Model](#failure--recovery-model)
 10. [Terraform Module Structure](#terraform-module-structure)
-   - [main.tf](#maintf)
-   - [variables.tf](#variablestf)
-   - [outputs.tf](#outputstf)
+    - [main.tf](#maintf)
+    - [variables.tf](#variablestf)
+    - [outputs.tf](#outputstf)
 11. [Enterprise Best Practices](#enterprise-best-practices)
 12. [Out of Scope/Non Goals](#out-of-scope--non-goals)
 13. [Security Considerations](#security-considerations)
@@ -129,9 +132,9 @@ This token is not used for AWS authentication.
 
 ### GitHub Actions OIDC Provider
 Each AWS account trusts the GitHub Actions OIDC provider:
-```
-arn:aws:iam::<ORG_ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com
-```
+  ```yml
+  arn:aws:iam::<ORG_ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com
+  ```
 
 OIDC removes the need for long-lived AWS access keys.
 
@@ -174,11 +177,11 @@ Session tags improve:
 ## Prerequisites
 
 ### AWS
-    - AWS Organizations enabled
-	- Org/Management account
-	- OIDC IAM roles created in Org account
-	- IAM role in Target account with trust to org OIDC role
-	- GitHub OIDC provider configured
+- AWS Organizations enabled
+- Org/Management account
+- OIDC IAM roles created in Org account
+- IAM role in Target account with trust to org OIDC role
+- GitHub OIDC provider configured
 
 ### GitHub
 - GitHub App installed on required orgs/repos
@@ -209,7 +212,7 @@ These secrets can be configured at org level/repo level secrets. For Day 2, thes
 
 This provides end-to-end traceability from GitHub commit → AWS API call.
 
-⸻
+---
 
 ## Terraform State & Locking Strategy
 
@@ -258,6 +261,7 @@ The bootstrap process creates and manages multiple S3 buckets with distinct resp
   Stores access logs for the Terraform state bucket.
 
 Each bucket is clearly tagged to indicate purpose, ownership, and lifecycle.
+
 ---
 
 ## Workflow Execution Flow
