@@ -129,7 +129,7 @@ jobs:
     name: Wait for Approval before proceeding for terraform apply job
     runs-on: ubuntu-latest
     needs: bootstrap-plan
-    environment: ${{ fromJSON('{"prd":"production","ppe":"pre-production","tst":"test","dev":"development"}')[inputs.environment] || 'development' }}
+    environment: ${{ fromJSON('{"prd":"production","ppe":"pre-production","tst":"test","dev":"development"}')[inputs.environment] }}
     steps:
       - name: Awaiting approval to proceed
         run: echo "The job is awaiting approval to proceed."
